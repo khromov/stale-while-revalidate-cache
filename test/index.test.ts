@@ -390,8 +390,6 @@ describe('createStaleWhileRevalidateCache', () => {
 
     await swr(key, fn) // This will trigger a revalidate since staleRevalidateTimeout passed
 
-    await asyncSleep(100)
-
     expect(revalidateTimeoutNotExceededEventsCount).toBe(2)
     expect(revalidateEventsCount).toBe(3)
 
