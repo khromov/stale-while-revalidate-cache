@@ -352,7 +352,7 @@ describe('createStaleWhileRevalidateCache', () => {
     expect(result).toEqual(value)
   })
 
-  it(`should not run the revalidate function while a function is already running`, async done => {
+  it(`should not run the revalidate function while it is already running`, async done => {
     const asyncSleep = (ms: number) =>
       new Promise(resolve => setTimeout(resolve, ms))
 

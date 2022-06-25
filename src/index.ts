@@ -111,7 +111,7 @@ export function createStaleWhileRevalidateCache(
 
           try {
             await storage.setItem(revalidateTimeoutKey, Date.now().toString())
-          } catch(error) {
+          } catch (error) {
             emitter.emit(EmitterEvents.cacheSetFailed, { cacheKey, error })
           }
 
@@ -119,7 +119,7 @@ export function createStaleWhileRevalidateCache(
 
           try {
             await storage.removeItem(revalidateTimeoutKey)
-          } catch(error) {
+          } catch (error) {
             emitter.emit(EmitterEvents.cacheSetFailed, { cacheKey, error })
           }
 
@@ -141,8 +141,6 @@ export function createStaleWhileRevalidateCache(
       cachedAge,
       revalidateAge,
     } = await retrieveCachedValue()
-
-    // console.log('getx', cachedValue, cachedAge, revalidateAge)
 
     if (!isNil(cachedValue)) {
       emitter.emit(EmitterEvents.cacheHit, { cacheKey, cachedValue })
