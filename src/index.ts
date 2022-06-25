@@ -109,11 +109,21 @@ export function createStaleWhileRevalidateCache(
         ) {
           emitter.emit(EmitterEvents.revalidate, { cacheKey, fn })
 
-          await storage.setItem(revalidateTimeoutKey, Date.now().toString())
+          try {
+            await storage.setItem(revalidateTimeoutKey, Date.now().toString())
+          } catch(error) {
+            emitter.emit(EmitterEvents.cacheSetFailed, { cacheKey, error })
+          }
 
           const result = await fn()
 
-          await storage.removeItem(revalidateTimeoutKey)
+          try {
+            await storage.removeItem(revalidateTimeoutKey)
+          } catch(error) {
+            emitter.emit(EmitterEvents.cacheSetFailed, { cacheKey, error })
+          }
+
+          // This does not have to be awaited, but the update could fail in the background
           await persistValue(result)
           return result
         }
