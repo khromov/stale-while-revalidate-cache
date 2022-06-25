@@ -16,6 +16,7 @@ export const EmitterEvents = {
   invoke: 'invoke',
   revalidate: 'revalidate',
   revalidateFailed: 'revalidateFailed',
+  revalidateTimeoutNotExceeded: 'revalidateTimeoutNotExceeded',
 } as const
 
 type StaleWhileRevalidateCache = <ReturnValue extends unknown>(
@@ -34,6 +35,7 @@ export function createStaleWhileRevalidateCache(
     maxTimeToLive,
     serialize,
     deserialize,
+    staleRevalidateTimeout,
   } = parseConfig(config)
 
   const emitter = getEmitter()
@@ -46,22 +48,27 @@ export function createStaleWhileRevalidateCache(
 
     const key = isFunction(cacheKey) ? String(cacheKey()) : String(cacheKey)
     const timeKey = `${key}_time`
+    const revalidateTimeoutKey = `${key}_revalidate`
 
     async function retrieveCachedValue() {
       try {
-        let [cachedValue, cachedTime] = await Promise.all([
+        let [cachedValue, cachedTime, revalidateTime] = await Promise.all([
           storage.getItem(key),
           storage.getItem(timeKey),
+          storage.getItem(revalidateTimeoutKey),
         ])
 
         cachedValue = deserialize(cachedValue)
 
         if (isNil(cachedValue)) {
-          return { cachedValue: null, cachedAge: 0 }
+          return { cachedValue: null, cachedAge: 0, revalidateAge: false }
         }
 
         const now = Date.now()
         const cachedAge = now - Number(cachedTime)
+        const revalidateAge = revalidateTime
+          ? now - Number(revalidateTime)
+          : false
 
         if (cachedAge > maxTimeToLive) {
           emitter.emit(EmitterEvents.cacheExpired, {
@@ -74,10 +81,10 @@ export function createStaleWhileRevalidateCache(
           cachedValue = null
         }
 
-        return { cachedValue, cachedAge }
+        return { cachedValue, cachedAge, revalidateAge }
       } catch (error) {
         emitter.emit(EmitterEvents.cacheGetFailed, { cacheKey, error })
-        return { cachedValue: null, cachedAge: 0 }
+        return { cachedValue: null, cachedAge: 0, revalidateAge: false }
       }
     }
 
@@ -92,25 +99,40 @@ export function createStaleWhileRevalidateCache(
       }
     }
 
-    async function revalidate() {
+    async function revalidate(revalidateAge: number | boolean) {
       try {
-        emitter.emit(EmitterEvents.revalidate, { cacheKey, fn })
+        // Check that we don't have an ongoing revalidation before revalidating
+        if (
+          revalidateAge === false ||
+          (typeof revalidateAge === 'number' &&
+            revalidateAge > staleRevalidateTimeout)
+        ) {
+          emitter.emit(EmitterEvents.revalidate, { cacheKey, fn })
 
-        const result = await fn()
+          await storage.setItem(revalidateTimeoutKey, Date.now().toString())
 
-        // Intentionally persisting asynchronously and not blocking since there is
-        // in any case a chance for a race condition to occur when using an external
-        // persistence store, like Redis, with multiple consumers. The impact is low.
-        persistValue(result)
+          const result = await fn()
 
-        return result
+          await storage.removeItem(revalidateTimeoutKey)
+          await persistValue(result)
+          return result
+        }
+
+        emitter.emit(EmitterEvents.revalidateTimeoutNotExceeded, { cacheKey })
+        return null as ReturnValue
       } catch (error) {
         emitter.emit(EmitterEvents.revalidateFailed, { cacheKey, fn, error })
         throw error
       }
     }
 
-    const { cachedValue, cachedAge } = await retrieveCachedValue()
+    const {
+      cachedValue,
+      cachedAge,
+      revalidateAge,
+    } = await retrieveCachedValue()
+
+    // console.log('getx', cachedValue, cachedAge, revalidateAge)
 
     if (!isNil(cachedValue)) {
       emitter.emit(EmitterEvents.cacheHit, { cacheKey, cachedValue })
@@ -121,9 +143,10 @@ export function createStaleWhileRevalidateCache(
           cachedValue,
           cachedAge,
         })
+
         // Non-blocking so that revalidation runs while stale cache data is returned
         // Error handled in `revalidate` by emitting an event, so only need a no-op here
-        revalidate().catch(() => {})
+        revalidate(revalidateAge).catch(() => {})
       }
 
       return cachedValue as ReturnValue
@@ -131,7 +154,7 @@ export function createStaleWhileRevalidateCache(
 
     emitter.emit(EmitterEvents.cacheMiss, { cacheKey, fn })
 
-    return revalidate()
+    return revalidate(false)
   }
 
   return extendWithEmitterMethods(emitter, staleWhileRevalidate)

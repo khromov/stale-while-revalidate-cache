@@ -351,4 +351,50 @@ describe('createStaleWhileRevalidateCache', () => {
 
     expect(result).toEqual(value)
   })
+
+  it(`should not run the revalidate function while a function is already running`, async done => {
+    const asyncSleep = (ms: number) =>
+      new Promise(resolve => setTimeout(resolve, ms))
+
+    const swr = createStaleWhileRevalidateCache({
+      ...validConfig,
+      minTimeToStale: 500,
+      staleRevalidateTimeout: 500,
+    })
+
+    const key = 'key'
+    const value = 'value'
+    const fn = jest.fn(async () => {
+      await asyncSleep(500)
+      return value
+    })
+
+    let revalidateTimeoutNotExceededEventsCount = 0
+    swr.on(EmitterEvents.revalidateTimeoutNotExceeded, () => {
+      revalidateTimeoutNotExceededEventsCount++
+    })
+
+    let revalidateEventsCount = 0
+    swr.on(EmitterEvents.revalidate, () => {
+      revalidateEventsCount++
+    })
+
+    await swr(key, fn) // This will trigger an initial blocking revalidate taking 500ms
+    await asyncSleep(550) // Make the cache go stale
+
+    await swr(key, fn) // This will trigger a background revalidate taking 500ms (1)
+    await swr(key, fn) // This will not trigger a revalidate since the first call is still running
+    await swr(key, fn) // This will not trigger a revalidate since the first call is still running
+
+    await asyncSleep(1100) // Let the background revalidate (1) finish + expire ~ 1 second
+
+    await swr(key, fn) // This will trigger a revalidate since staleRevalidateTimeout passed
+
+    await asyncSleep(100)
+
+    expect(revalidateTimeoutNotExceededEventsCount).toBe(2)
+    expect(revalidateEventsCount).toBe(3)
+
+    done()
+  })
 })

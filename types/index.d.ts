@@ -10,4 +10,5 @@ export interface Config {
   storage: Storage
   serialize?: (value: any) => any
   deserialize?: (value: any) => any
+  staleRevalidateTimeout?: number
 }

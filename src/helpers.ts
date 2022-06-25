@@ -40,8 +40,16 @@ export function parseConfig(config: Config) {
     ? config.deserialize
     : passThrough
 
+  const staleRevalidateTimeout = config.staleRevalidateTimeout || 10000
+
   if (minTimeToStale >= maxTimeToLive) {
     throw new Error('minTimeToStale must be less than maxTimeToLive')
+  }
+
+  if (config.staleRevalidateTimeout && !isFunction(storage.removeItem)) {
+    throw new Error(
+      'When using staleRevalidateTimeout, your storage object must specify a removeItem function'
+    )
   }
 
   return {
@@ -50,5 +58,6 @@ export function parseConfig(config: Config) {
     maxTimeToLive,
     serialize,
     deserialize,
+    staleRevalidateTimeout,
   }
 }

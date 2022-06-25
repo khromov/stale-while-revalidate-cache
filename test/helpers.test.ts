@@ -93,7 +93,7 @@ describe('parseConfig', () => {
       { storage: async function() {} },
       // eslint-disable-next-line no-new-func
       { storage: new Function() },
-      { storage: { getItem: null, setItem: null } },
+      { storage: { getItem: null, setItem: null, removeItem: null } },
     ]
 
     invalidConfigs.forEach(invalidConfig => {
