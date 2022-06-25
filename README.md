@@ -95,6 +95,12 @@ This property can optionally be provided if you want to deserialize a previously
 
 To continue with the object value in `window.localStorage` example, you can set `deserialize` to `JSON.parse` and the serialized object will be parsed as a plain JavaScript object.
 
+#### staleRevalidateTimeout
+
+Default: `10000` (10 seconds)
+
+When an update to a cached value is required because it is stale, we can experience a [cache stampede](https://en.wikipedia.org/wiki/Cache_stampede) as many concurrent requests find that the value is expired and attempt to update it in the background by executing the associated update function. This option throttles how often the function can be executed. Any concurrent attempts to fetch the data will return the stale data but not trigger a new function execution.
+
 ### Event Emitter
 
 The cache helper method returned from the `createStaleWhileRevalidateCache` function is a fully functional event emitter that is an instance of the excellent [Emittery](https://www.npmjs.com/package/emittery) package. Please look at the linked package's documentation to see all the available methods.
@@ -136,6 +142,10 @@ Emitted whenever the task function is invoked. It will always be invoked except 
 #### revalidateFailed
 
 Emitted whenever the revalidate function failed, whether that is synchronously when the cache is bypassed or asynchronously.
+
+#### revalidateTimeoutNotExceeded
+
+Emitted when the task function was supposed to be invoked, but there is already a running function trying to update that key. (See `staleRevalidateTimeout` option)
 
 ### Example
 
